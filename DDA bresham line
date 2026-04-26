@@ -1,0 +1,71 @@
+#include <iostream>
+#include <GL/glut.h>
+using namespace std;
+int xa, ya, xb, yb;
+void bresenhamline()
+{
+    int dx, dy, d, c, r, f;
+    dx = xa;
+    dy = yb - ya;
+    d = 2 * abs(dy) - abs(dx);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBegin(GL_POINTS);
+    if (abs(dx) > abs(dy))
+    {
+        d = 2 * abs(dy) - abs(dx);
+    }
+    if (dx > 0)
+    {
+        c = xa;
+        r = ya;
+        f = xb;
+    }
+    else
+    {
+        c = xa;
+        r = yb;
+        f = xa;
+    }
+    while (f >= c)
+    {
+        if (d < 0)
+        {
+            c = c + 1;
+            d = d + 2 * abs(dy);
+        }
+        else
+        {
+            c = c + 1;
+            if ((dx < 0 && dy < 0) || (dx > 0 && dy > 0))
+            {
+                r = r + 1;
+            }
+            else
+            {
+                r = r - 1;
+            }
+            d = 2 * abs(dy) - abs(dx);
+        }
+        glVertex2d(c, r);
+    }
+    glEnd();
+    glFlush();
+}
+int main(int argc, char **argv)
+{
+    cout << "enter values";
+    cin >> xa >> ya;
+    cout << "enter another value";
+    cin >> xb >> yb;
+    glutInit(&argc, argv);                       // initialize GLUT(graphics libraray utility tool) library
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB); // set the initial display mode
+    glutInitWindowPosition(0, 0);                // set the initial window position
+    glutInitWindowSize(640, 480);                // set the initial size (width and height)
+    glutCreateWindow("Pixel");
+    glClearColor(1.0, 1.0, 1.0, 0); // set clear color to white
+    glColor3f(0.0, 0.0, 0.0);       // set fill color to black
+    gluOrtho2D(0, 640, 0, 480);
+    glutDisplayFunc(bresenhamline); // call the displaying function
+    glutMainLoop();                 // keep displaying until program is closed
+    return 0;
+}
