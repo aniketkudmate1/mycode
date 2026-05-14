@@ -1,0 +1,422 @@
+CREATE DATABASE MarketplaceDB;
+USE MarketplaceDB;
+
+CREATE TABLE Categories(
+    category_ID INT PRIMARY KEY,
+    category_name VARCHAR(50)
+);
+
+CREATE TABLE Products(
+    product_ID INT PRIMARY KEY,
+    name VARCHAR(50),
+    description VARCHAR(100),
+    price INT,
+    category_ID INT,
+    FOREIGN KEY(category_ID) REFERENCES Categories(category_ID)
+);
+
+CREATE TABLE Warehouses(
+    warehouse_ID INT PRIMARY KEY,
+    warehouse_name VARCHAR(50),
+    address VARCHAR(100)
+);
+
+CREATE TABLE Inventory(
+    inventory_ID INT PRIMARY KEY,
+    product_ID INT,
+    warehouse_ID INT,
+    quantity_in_stock INT,
+    last_stock_update DATE,
+    FOREIGN KEY(product_ID) REFERENCES Products(product_ID),
+    FOREIGN KEY(warehouse_ID) REFERENCES Warehouses(warehouse_ID)
+);
+
+CREATE TABLE Orders(
+    order_ID INT PRIMARY KEY,
+    customer_ID INT,
+    order_date DATE,
+    shipping_address VARCHAR(100),
+    order_status VARCHAR(50)
+);
+
+CREATE TABLE Shipments(
+    shipment_ID INT PRIMARY KEY,
+    order_ID INT,
+    shipping_carrier VARCHAR(50),
+    tracking_number VARCHAR(50),
+    shipment_date DATE,
+    FOREIGN KEY(order_ID) REFERENCES Orders(order_ID)
+);
+
+INSERT INTO Categories VALUES
+(1,'Refrigerators'),
+(2,'Washing Machines'),
+(3,'Microwave'),
+(4,'Television'),
+(5,'Air Conditioners');
+
+INSERT INTO Products VALUES
+(101,'LG Fridge','Double Door',25000,1),
+(102,'Samsung Washer','Front Load',30000,2),
+(103,'IFB Microwave','Convection',12000,3),
+(104,'Sony TV','Smart TV',45000,4),
+(105,'Voltas AC','1.5 Ton',35000,5);
+
+INSERT INTO Warehouses VALUES
+(1,'Warehouse A','Pune'),
+(2,'Warehouse B','Mumbai'),
+(3,'Warehouse C','Delhi'),
+(4,'Warehouse D','Pune'),
+(5,'Warehouse E','Chennai');
+
+INSERT INTO Inventory VALUES
+(1,101,1,20,'2026-01-10'),
+(2,102,2,5,'2026-01-10'),
+(3,103,3,15,'2026-01-10'),
+(4,104,4,8,'2026-01-10'),
+(5,105,5,30,'2026-01-10');
+
+INSERT INTO Orders VALUES
+(1,201,'2026-01-12','Pune','Pending'),
+(2,202,'2026-01-13','Mumbai','Shipped'),
+(3,203,'2026-01-14','Delhi','Delivered'),
+(4,204,'2026-01-15','Pune','Pending'),
+(5,205,'2026-01-16','Chennai','Delivered');
+
+INSERT INTO Shipments VALUES
+(1,1,'BlueDart','TR101','2026-01-13'),
+(2,2,'DTDC','TR102','2026-01-14'),
+(3,3,'FedEx','TR103','2026-01-15'),
+(4,4,'BlueDart','TR104','2026-01-16'),
+(5,5,'DTDC','TR105','2026-01-17');
+
+1) Products under each category
+SELECT C.category_name,
+COUNT(P.product_ID) AS total_products
+FROM Categories C
+JOIN Products P
+ON C.category_ID=P.category_ID
+GROUP BY C.category_name;
+2) Procedure to retrieve orders using customer ID
+DELIMITER //
+
+CREATE PROCEDURE GetCustomerOrders(IN cid INT)
+BEGIN
+    SELECT *
+    FROM Orders
+    WHERE customer_ID=cid;
+END //
+
+DELIMITER ;
+Execute
+CALL GetCustomerOrders(201);
+3) Product name with category name
+SELECT P.name,
+C.category_name
+FROM Products P
+JOIN Categories C
+ON P.category_ID=C.category_ID;
+4) View for low stock products
+CREATE VIEW LowStockProducts AS
+SELECT P.name,
+SUM(I.quantity_in_stock) AS total_stock
+FROM Products P
+JOIN Inventory I
+ON P.product_ID=I.product_ID
+GROUP BY P.name
+HAVING total_stock < 10;
+Display View
+SELECT * FROM LowStockProducts;
+5) Count orders by status
+SELECT order_status,
+COUNT(*) AS total_orders
+FROM Orders
+GROUP BY order_status;
+6) Trigger to prevent negative stock
+DELIMITER //
+
+CREATE TRIGGER check_stock
+BEFORE INSERT ON Inventory
+FOR EACH ROW
+BEGIN
+    IF NEW.quantity_in_stock < 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT='Stock cannot be negative';
+    END IF;
+END //
+
+DELIMITER ;
+7) Warehouses in a specific city
+SELECT *
+FROM Warehouses
+WHERE city='Pune';
+
+1) Total quantity in stock for each product
+SELECT product_ID,
+SUM(quantity_in_stock) AS total_stock
+FROM Inventory
+GROUP BY product_ID;
+2) Average product price in each category
+SELECT C.category_name,
+AVG(P.price) AS average_price
+FROM Products P
+JOIN Categories C
+ON P.category_ID=C.category_ID
+GROUP BY C.category_name;
+3) Products in Refrigerators category or price greater than 1000
+SELECT name
+FROM Products
+WHERE category_ID=
+(
+SELECT category_ID
+FROM Categories
+WHERE category_name='Refrigerators'
+)
+
+UNION
+
+SELECT name
+FROM Products
+WHERE price > 1000;
+4) Cursor to display products and stock
+DELIMITER //
+
+CREATE PROCEDURE ProductStock()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE pname VARCHAR(50);
+    DECLARE stock INT;
+
+    DECLARE cur CURSOR FOR
+    SELECT P.name,SUM(I.quantity_in_stock)
+    FROM Products P
+    JOIN Inventory I
+    ON P.product_ID=I.product_ID
+    GROUP BY P.name;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1;
+
+    OPEN cur;
+
+    read_loop: LOOP
+
+    FETCH cur INTO pname,stock;
+
+    IF done=1 THEN
+        LEAVE read_loop;
+    END IF;
+
+    SELECT pname,stock;
+
+    END LOOP;
+
+    CLOSE cur;
+END //
+
+DELIMITER ;
+Execute
+CALL ProductStock();
+5) Warehouses with stock less than 50
+SELECT warehouse_ID,
+SUM(quantity_in_stock) AS total_stock
+FROM Inventory
+GROUP BY warehouse_ID
+HAVING total_stock < 50;
+6) View for orders after 2026-01-01
+CREATE VIEW RecentOrders AS
+SELECT *
+FROM Orders
+WHERE order_date > '2026-01-01';
+Display View
+SELECT * FROM RecentOrders;
+7) Function to return category name
+DELIMITER //
+
+CREATE FUNCTION GetCategoryName(cid INT)
+RETURNS VARCHAR(50)
+DETERMINISTIC
+BEGIN
+    DECLARE cname VARCHAR(50);
+
+    SELECT category_name
+    INTO cname
+    FROM Categories
+    WHERE category_ID=cid;
+
+    RETURN cname;
+END //
+
+DELIMITER ;
+
+1) Shipments handled by each carrier
+SELECT shipping_carrier,
+COUNT(*) AS total_shipments
+FROM Shipments
+GROUP BY shipping_carrier;
+2) Products ordered by price ascending
+SELECT *
+FROM Products
+ORDER BY price ASC;
+3) Trigger to backup deleted products
+CREATE TABLE ProductBackup(
+    product_ID INT,
+    name VARCHAR(50),
+    description VARCHAR(100),
+    price INT,
+    category_ID INT
+);
+DELIMITER //
+
+CREATE TRIGGER backup_product
+BEFORE DELETE ON Products
+FOR EACH ROW
+BEGIN
+    INSERT INTO ProductBackup
+    VALUES(
+        OLD.product_ID,
+        OLD.name,
+        OLD.description,
+        OLD.price,
+        OLD.category_ID
+    );
+END //
+
+DELIMITER ;
+4) View for product stock and warehouse
+CREATE VIEW ProductWarehouseView AS
+SELECT P.name,
+I.quantity_in_stock,
+W.warehouse_name
+FROM Products P
+JOIN Inventory I
+ON P.product_ID=I.product_ID
+JOIN Warehouses W
+ON I.warehouse_ID=W.warehouse_ID;
+Display View
+SELECT * FROM ProductWarehouseView;
+5) Orders placed on specific date
+SELECT *
+FROM Orders
+WHERE order_date='2026-01-12';
+6) Procedure to insert product
+DELIMITER //
+
+CREATE PROCEDURE AddProduct(
+IN pid INT,
+IN pname VARCHAR(50),
+IN descr VARCHAR(100),
+IN pr INT,
+IN cid INT
+)
+BEGIN
+    INSERT INTO Products
+    VALUES(pid,pname,descr,pr,cid);
+END //
+
+DELIMITER ;
+Execute
+CALL AddProduct(
+106,
+'Whirlpool Fridge',
+'Triple Door',
+40000,
+1
+);
+7) Customers whose shipping city contains Pune
+SELECT *
+FROM Orders
+WHERE shipping_address LIKE '%Pune%';
+
+1) Function to check out of stock product
+DELIMITER //
+
+CREATE FUNCTION CheckStock(pid INT)
+RETURNS VARCHAR(20)
+DETERMINISTIC
+BEGIN
+    DECLARE total INT;
+
+    SELECT SUM(quantity_in_stock)
+    INTO total
+    FROM Inventory
+    WHERE product_ID=pid;
+
+    IF total=0 THEN
+        RETURN 'Out of Stock';
+    ELSE
+        RETURN 'Available';
+    END IF;
+END //
+
+DELIMITER ;
+Execute
+SELECT CheckStock(102);
+2) Order details with tracking number
+SELECT O.order_ID,
+O.customer_ID,
+S.tracking_number
+FROM Orders O
+JOIN Shipments S
+ON O.order_ID=S.order_ID;
+3) Products in Washing Machines category or price greater than 900
+SELECT name
+FROM Products
+WHERE category_ID=
+(
+SELECT category_ID
+FROM Categories
+WHERE category_name='Washing Machines'
+)
+
+UNION
+
+SELECT name
+FROM Products
+WHERE price > 900;
+4) Products in specific category
+SELECT *
+FROM Products
+WHERE category_ID=1;
+5) Total number of orders
+SELECT COUNT(*) AS total_orders
+FROM Orders;
+6) Cursor for product names and prices
+DELIMITER //
+
+CREATE PROCEDURE ProductDetails()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE pname VARCHAR(50);
+    DECLARE pr INT;
+
+    DECLARE cur CURSOR FOR
+    SELECT name,price
+    FROM Products;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1;
+
+    OPEN cur;
+
+    read_loop: LOOP
+
+    FETCH cur INTO pname,pr;
+
+    IF done=1 THEN
+        LEAVE read_loop;
+    END IF;
+
+    SELECT pname,pr;
+
+    END LOOP;
+
+    CLOSE cur;
+END //
+
+DELIMITER ;
+Execute
+CALL ProductDetails();
+7) Maximum and minimum product price
+SELECT MAX(price) AS maximum_price,
+MIN(price) AS minimum_price
+FROM Products;
+
