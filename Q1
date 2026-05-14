@@ -1,0 +1,305 @@
+CREATE TABLE Classes (
+    class_ID INT PRIMARY KEY,
+    class_name VARCHAR(50),
+    teacher_ID INT
+);
+
+CREATE TABLE Students (
+    student_ID INT PRIMARY KEY,
+    name VARCHAR(50),
+    date_of_birth DATE,
+    gender VARCHAR(10),
+    class_ID INT,
+    FOREIGN KEY (class_ID) REFERENCES Classes(class_ID)
+);
+
+CREATE TABLE Subjects (
+    subject_ID INT PRIMARY KEY,
+    subject_name VARCHAR(50)
+);
+
+CREATE TABLE Teachers (
+    teacher_ID INT PRIMARY KEY,
+    name VARCHAR(50),
+    subject_ID INT,
+    FOREIGN KEY (subject_ID) REFERENCES Subjects(subject_ID)
+);
+
+CREATE TABLE Marks (
+    exam_ID INT PRIMARY KEY,
+    student_ID INT,
+    class_ID INT,
+    subject_ID INT,
+    exam_name VARCHAR(50),
+    marks INT,
+    FOREIGN KEY (student_ID) REFERENCES Students(student_ID),
+    FOREIGN KEY (class_ID) REFERENCES Classes(class_ID),
+    FOREIGN KEY (subject_ID) REFERENCES Subjects(subject_ID)
+);
+
+-- =========================================
+-- INSERT VALUES INTO CLASSES
+-- =========================================
+
+INSERT INTO Classes VALUES
+(1, 'FYBCA', 101),
+(2, 'SYBCA', 102),
+(3, 'TYBCA', 103),
+(4, 'FYBCS', 104),
+(5, 'SYBCS', 105);
+
+-- =========================================
+-- INSERT VALUES INTO SUBJECTS
+-- =========================================
+
+INSERT INTO Subjects VALUES
+(1, 'DBMS'),
+(2, 'Java'),
+(3, 'Python'),
+(4, 'Networking');
+
+-- =========================================
+-- INSERT VALUES INTO TEACHERS
+-- =========================================
+
+INSERT INTO Teachers VALUES
+(101, 'Amit Sir', 1),
+(102, 'Rohit Sir', 2),
+(103, 'Sneha Maam', 3),
+(104, 'Pooja Maam', 4),
+(105, 'Kiran Sir', 1);
+
+-- =========================================
+-- INSERT VALUES INTO STUDENTS
+-- =========================================
+
+INSERT INTO Students VALUES
+(1, 'Aniket', '2005-03-15', 'Male', 1),
+(2, 'Priya', '2004-07-10', 'Female', 2),
+(3, 'Rahul', '2005-03-22', 'Male', 3),
+(4, 'Snehal', '2004-11-18', 'Female', 4),
+(5, 'Kunal', '2005-01-30', 'Male', 5);
+
+-- =========================================
+-- INSERT VALUES INTO MARKS
+-- =========================================
+
+INSERT INTO Marks VALUES
+(1, 1, 1, 1, 'MidTerm', 22),
+(2, 2, 2, 2, 'MidTerm', 24),
+(3, 3, 3, 3, 'MidTerm', 20),
+(4, 4, 4, 4, 'MidTerm', 25),
+(5, 5, 5, 1, 'MidTerm', 18);
+
+1) FUNCTION TO CALCULATE ABSENT DAYS
+CREATE FUNCTION GetAbsentDays
+(
+    @StudentID INT,
+    @Month INT,
+    @Year INT
+)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @AbsentDays INT;
+
+    SELECT @AbsentDays = COUNT(*)
+    FROM Attendance
+    WHERE student_ID = @StudentID
+    AND status = 'Absent'
+    AND MONTH(attendance_date) = @Month
+    AND YEAR(attendance_date) = @Year;
+
+    RETURN @AbsentDays;
+END;
+2) STUDENTS IN 'SE' CLASS HAVING MARKS MORE THAN 20
+SELECT DISTINCT s.name
+FROM Students s
+JOIN Classes c
+ON s.class_ID = c.class_ID
+JOIN Marks m
+ON s.student_ID = m.student_ID
+WHERE c.class_name = 'SE'
+AND m.marks > 20;
+3) STUDENTS WHOSE SECOND LETTER IS 'a'
+SELECT name
+FROM Students
+WHERE name LIKE '_a%';
+4) AVERAGE ATTENDANCE PERCENTAGE OF 'SE' CLASS FOR MARCH
+SELECT AVG(attendance_percentage) AS AverageAttendance
+FROM Attendance
+WHERE MONTH(attendance_date) = 3
+AND class_ID = (
+    SELECT class_ID
+    FROM Classes
+    WHERE class_name = 'SE'
+);
+5) STUDENTS WHO SCORED BELOW 10
+SELECT DISTINCT s.name
+FROM Students s
+JOIN Marks m
+ON s.student_ID = m.student_ID
+WHERE m.marks < 10;
+6) TOTAL MARKS OF 'SE' CLASS STUDENTS IN MIDTERM
+SELECT 
+s.name,
+SUM(m.marks) AS TotalMarks
+FROM Students s
+JOIN Classes c
+ON s.class_ID = c.class_ID
+JOIN Marks m
+ON s.student_ID = m.student_ID
+WHERE c.class_name = 'SE'
+AND m.exam_name = 'Midterm'
+GROUP BY s.name;
+7) CURSOR TO DISPLAY STUDENT NAMES
+DECLARE @StudentName VARCHAR(50);
+
+DECLARE StudentCursor CURSOR FOR
+SELECT name FROM Students;
+
+OPEN StudentCursor;
+
+FETCH NEXT FROM StudentCursor INTO @StudentName;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    PRINT @StudentName;
+
+    FETCH NEXT FROM StudentCursor INTO @StudentName;
+END;
+
+CLOSE StudentCursor;
+DEALLOCATE StudentCursor;
+1) CREATE VIEW FOR ATTENDANCE SUMMARY
+CREATE VIEW AttendanceSummary AS
+SELECT 
+student_ID,
+COUNT(*) AS TotalDays,
+SUM(CASE WHEN status='Present' THEN 1 ELSE 0 END) AS PresentDays,
+SUM(CASE WHEN status='Absent' THEN 1 ELSE 0 END) AS AbsentDays
+FROM Attendance
+GROUP BY student_ID;
+2) NUMBER OF STUDENTS IN EACH CLASS
+SELECT 
+c.class_name,
+COUNT(s.student_ID) AS TotalStudents
+FROM Classes c
+LEFT JOIN Students s
+ON c.class_ID = s.class_ID
+GROUP BY c.class_name;
+3) STUDENTS WHOSE NAME STARTS WITH 'D'
+SELECT student_ID, name
+FROM Students
+WHERE name LIKE 'D%';
+4) TOTAL NUMBER OF SUBJECTS
+SELECT COUNT(*) AS TotalSubjects
+FROM Subjects;
+5) TRIGGER FOR STUDENT CLASS HISTORY
+CREATE TABLE Student_Class_History (
+    student_ID INT,
+    student_name VARCHAR(50),
+    old_class_id INT,
+    new_class_id INT,
+    changed_on DATETIME
+);
+TRIGGER
+CREATE TRIGGER trg_ClassChange
+ON Students
+AFTER UPDATE
+AS
+BEGIN
+    INSERT INTO Student_Class_History
+    (
+        student_ID,
+        student_name,
+        old_class_id,
+        new_class_id,
+        changed_on
+    )
+    SELECT 
+        i.student_ID,
+        i.name,
+        d.class_ID,
+        i.class_ID,
+        GETDATE()
+    FROM inserted i
+    JOIN deleted d
+    ON i.student_ID = d.student_ID
+    WHERE i.class_ID <> d.class_ID;
+END;
+6) TOP 3 HIGHEST MARKS IN MIDTERM
+SELECT TOP 3 *
+FROM Marks
+WHERE exam_name = 'Midterm'
+ORDER BY marks DESC;
+7) STUDENTS ORDERED BY NAME
+SELECT *
+FROM Students
+ORDER BY name ASC;
+1) STUDENT NAMES WITH CLASS NAMES
+SELECT 
+s.name,
+c.class_name
+FROM Students s
+JOIN Classes c
+ON s.class_ID = c.class_ID;
+2) HIGHEST MARKS IN EACH SUBJECT
+SELECT 
+subject_ID,
+MAX(marks) AS HighestMarks
+FROM Marks
+GROUP BY subject_ID;
+3) TRIGGER TO PREVENT NEGATIVE MARKS
+CREATE TRIGGER trg_NoNegativeMarks
+ON Marks
+INSTEAD OF INSERT
+AS
+BEGIN
+    IF EXISTS (
+        SELECT *
+        FROM inserted
+        WHERE marks < 0
+    )
+    BEGIN
+        PRINT 'Negative marks are not allowed';
+    END
+    ELSE
+    BEGIN
+        INSERT INTO Marks
+        SELECT * FROM inserted;
+    END
+END;
+4) PROCEDURE TO FIND TOTAL STUDENTS IN CLASS
+CREATE PROCEDURE TotalStudentsInClass
+@ClassID INT
+AS
+BEGIN
+    SELECT COUNT(*) AS TotalStudents
+    FROM Students
+    WHERE class_ID = @ClassID;
+END;
+5) STUDENTS WHOSE TOTAL MARKS > 80
+SELECT 
+s.name,
+SUM(m.marks) AS TotalMarks
+FROM Students s
+JOIN Marks m
+ON s.student_ID = m.student_ID
+GROUP BY s.name
+HAVING SUM(m.marks) > 80;
+6) STUDENTS WHOSE NAME CONTAINS 'sh'
+SELECT *
+FROM Students
+WHERE name LIKE '%sh%';
+7) SUBJECTS WHOSE AVERAGE MARKS ARE ABOVE OVERALL AVERAGE
+SELECT 
+subject_ID,
+AVG(marks) AS SubjectAverage
+FROM Marks
+GROUP BY subject_ID
+HAVING AVG(marks) >
+(
+    SELECT AVG(marks)
+    FROM Marks
+);
