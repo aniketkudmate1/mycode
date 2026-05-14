@@ -1,0 +1,338 @@
+CREATE DATABASE RestaurantDB;
+USE RestaurantDB;
+
+CREATE TABLE Menu(
+    item_ID INT PRIMARY KEY,
+    item_name VARCHAR(50),
+    category VARCHAR(50),
+    price INT
+);
+
+CREATE TABLE Customers(
+    customer_ID INT PRIMARY KEY,
+    name VARCHAR(50),
+    contact_number VARCHAR(15)
+);
+
+CREATE TABLE Orders(
+    order_ID INT PRIMARY KEY,
+    customer_ID INT,
+    order_date_time DATETIME,
+    FOREIGN KEY(customer_ID) REFERENCES Customers(customer_ID)
+);
+
+CREATE TABLE OrderItems(
+    order_ID INT,
+    item_ID INT,
+    quantity INT,
+    unit_price INT,
+    FOREIGN KEY(order_ID) REFERENCES Orders(order_ID),
+    FOREIGN KEY(item_ID) REFERENCES Menu(item_ID)
+);
+
+INSERT INTO Menu VALUES
+(1,'Margherita Pizza','Pizza',300),
+(2,'Veg Burger','Burgers',150),
+(3,'Pasta','Italian',250),
+(4,'Cheese Pizza','Pizza',400),
+(5,'French Fries','Snacks',120);
+
+INSERT INTO Customers VALUES
+(101,'Aniket','9876543210'),
+(102,'Rohan','9876543211'),
+(103,'Sneha','9876543212'),
+(104,'Priya','9876543213'),
+(105,'Karan','9876543214');
+
+INSERT INTO Orders VALUES
+(1,101,NOW()),
+(2,102,NOW()),
+(3,103,'2025-05-12 10:00:00'),
+(4,104,'2025-05-13 12:00:00'),
+(5,105,'2025-05-14 08:00:00');
+
+INSERT INTO OrderItems VALUES
+(1,1,2,300),
+(1,2,1,150),
+(2,3,1,250),
+(3,4,2,400),
+(4,2,3,150);
+
+1) Total sales for each menu category
+SELECT M.category,
+SUM(OI.quantity * OI.unit_price) AS total_sales
+FROM Menu M
+JOIN OrderItems OI
+ON M.item_ID=OI.item_ID
+GROUP BY M.category;
+2) Stored procedure for specific order details
+DELIMITER //
+
+CREATE PROCEDURE GetOrderDetails(IN oid INT)
+BEGIN
+    SELECT *
+    FROM OrderItems
+    WHERE order_ID=oid;
+END //
+
+DELIMITER ;
+Execute
+CALL GetOrderDetails(1);
+3) List all orders with customer names
+SELECT O.order_ID,
+C.name,
+O.order_date_time
+FROM Orders O
+JOIN Customers C
+ON O.customer_ID=C.customer_ID;
+4) Menu items never ordered
+SELECT item_name
+FROM Menu
+WHERE item_ID NOT IN
+(
+SELECT item_ID
+FROM OrderItems
+);
+5) View for top 3 selling items
+CREATE VIEW TopSellingItems AS
+SELECT M.item_name,
+SUM(OI.quantity) AS total_sold
+FROM Menu M
+JOIN OrderItems OI
+ON M.item_ID=OI.item_ID
+GROUP BY M.item_name
+ORDER BY total_sold DESC
+LIMIT 3;
+Display View
+SELECT * FROM TopSellingItems;
+6) Orders placed on current day
+SELECT *
+FROM Orders
+WHERE DATE(order_date_time)=CURDATE();
+7) Cursor for daily sales summary
+DELIMITER //
+
+CREATE PROCEDURE DailySales()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE total INT;
+
+    DECLARE cur CURSOR FOR
+    SELECT SUM(quantity*unit_price)
+    FROM OrderItems;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1;
+
+    OPEN cur;
+
+    read_loop: LOOP
+
+    FETCH cur INTO total;
+
+    IF done=1 THEN
+        LEAVE read_loop;
+    END IF;
+
+    SELECT total AS Daily_Sales;
+
+    END LOOP;
+
+    CLOSE cur;
+END //
+
+DELIMITER ;
+
+1) Total price of each item in order_ID 1
+SELECT item_ID,
+(quantity * unit_price) AS total_price
+FROM OrderItems
+WHERE order_ID=1;
+2) Names of customers who placed orders
+SELECT DISTINCT C.name
+FROM Customers C
+JOIN Orders O
+ON C.customer_ID=O.customer_ID;
+3) Total number of customers
+SELECT COUNT(*) AS total_customers
+FROM Customers;
+4) Customers who ordered Pizza and Burgers
+SELECT DISTINCT C.name
+FROM Customers C
+JOIN Orders O
+ON C.customer_ID=O.customer_ID
+JOIN OrderItems OI
+ON O.order_ID=OI.order_ID
+JOIN Menu M
+ON OI.item_ID=M.item_ID
+WHERE M.category IN ('Pizza','Burgers');
+5) Menu items never included in orders
+SELECT item_name
+FROM Menu
+WHERE item_ID NOT IN
+(
+SELECT item_ID
+FROM OrderItems
+);
+6) Function to check item category
+DELIMITER //
+
+CREATE FUNCTION CheckCategory(
+iid INT,
+cat VARCHAR(50)
+)
+RETURNS VARCHAR(20)
+DETERMINISTIC
+BEGIN
+    DECLARE result VARCHAR(20);
+
+    IF EXISTS(
+        SELECT *
+        FROM Menu
+        WHERE item_ID=iid
+        AND category=cat
+    )
+    THEN
+        SET result='YES';
+    ELSE
+        SET result='NO';
+    END IF;
+
+    RETURN result;
+END //
+
+DELIMITER ;
+Execute
+SELECT CheckCategory(1,'Pizza');
+7) Trigger to prevent negative price
+DELIMITER //
+
+CREATE TRIGGER check_price
+BEFORE INSERT ON Menu
+FOR EACH ROW
+BEGIN
+    IF NEW.price < 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT='Price cannot be negative';
+    END IF;
+END //
+
+DELIMITER ;
+
+1) Procedure to insert menu item
+DELIMITER //
+
+CREATE PROCEDURE AddMenuItem(
+IN iid INT,
+IN iname VARCHAR(50),
+IN cat VARCHAR(50),
+IN pr INT
+)
+BEGIN
+    INSERT INTO Menu
+    VALUES(iid,iname,cat,pr);
+END //
+
+DELIMITER ;
+Execute
+CALL AddMenuItem(6,'Noodles','Chinese',200);
+2) Highest and lowest priced items
+SELECT item_name,price
+FROM Menu
+WHERE price=
+(SELECT MAX(price) FROM Menu)
+OR price=
+(SELECT MIN(price) FROM Menu);
+3) Count items in each category
+SELECT category,
+COUNT(*) AS total_items
+FROM Menu
+GROUP BY category;
+4) Average items per order
+SELECT AVG(quantity) AS average_items
+FROM OrderItems;
+5) Item names in specific order
+SELECT M.item_name
+FROM Menu M
+JOIN OrderItems OI
+ON M.item_ID=OI.item_ID
+WHERE OI.order_ID=1;
+6) Customers with more than 3 orders
+SELECT customer_ID,
+COUNT(order_ID) AS total_orders
+FROM Orders
+GROUP BY customer_ID
+HAVING COUNT(order_ID) > 3;
+7) Items with average unit price greater than 200
+SELECT item_ID,
+AVG(unit_price) AS average_price
+FROM OrderItems
+GROUP BY item_ID
+HAVING AVG(unit_price) > 200;
+
+1) Customers whose names contain 'an'
+SELECT *
+FROM Customers
+WHERE name LIKE '%an%';
+2) Retrieve customer using customer_ID
+SELECT *
+FROM Customers
+WHERE customer_ID=101;
+3) Trigger to log deleted customers
+CREATE TABLE CustomerBackup(
+    customer_ID INT,
+    name VARCHAR(50),
+    contact_number VARCHAR(15)
+);
+DELIMITER //
+
+CREATE TRIGGER backup_customer
+BEFORE DELETE ON Customers
+FOR EACH ROW
+BEGIN
+    INSERT INTO CustomerBackup
+    VALUES(
+        OLD.customer_ID,
+        OLD.name,
+        OLD.contact_number
+    );
+END //
+
+DELIMITER ;
+4) Procedure to add menu item
+DELIMITER //
+
+CREATE PROCEDURE AddItem(
+IN iid INT,
+IN iname VARCHAR(50),
+IN cat VARCHAR(50),
+IN pr INT
+)
+BEGIN
+    INSERT INTO Menu
+    VALUES(iid,iname,cat,pr);
+END //
+
+DELIMITER ;
+Execute
+CALL AddItem(6,'Noodles','Chinese',220);
+5) Menu item names with total quantity sold
+SELECT M.item_name,
+SUM(OI.quantity) AS total_quantity
+FROM Menu M
+JOIN OrderItems OI
+ON M.item_ID=OI.item_ID
+GROUP BY M.item_name;
+6) Customers with order amount greater than 1000
+SELECT C.name,
+SUM(OI.quantity * OI.unit_price) AS total_amount
+FROM Customers C
+JOIN Orders O
+ON C.customer_ID=O.customer_ID
+JOIN OrderItems OI
+ON O.order_ID=OI.order_ID
+GROUP BY C.name
+HAVING total_amount > 1000;
+7) Average price of menu items
+SELECT AVG(price) AS average_price
+FROM Menu;
+
